@@ -117,7 +117,7 @@ export default function StatsModal() {
                 <div key={prov} className="bg-gray-50 rounded-xl p-3 text-sm space-y-2">
                   <div className="font-medium text-gray-700 flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${prov === 'apimart' ? 'bg-blue-400' : prov === 'dmfox' ? 'bg-amber-400' : 'bg-gray-300'}`} />
-                    {prov === 'apimart' ? 'APIMart' : prov === 'dmfox' ? 'DM-Fox' : '未知'}
+                    {prov === 'apimart' ? 'APIMart' : prov === 'dmfox' ? 'New API' : '未知'}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
                     <div>任务: <span className="font-mono text-gray-700">{data.total}</span></div>

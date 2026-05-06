@@ -3,7 +3,7 @@ import { PROVIDER_CONFIG, type Provider } from '../types'
 
 const providers: { key: Provider; label: string; desc: string }[] = [
   { key: 'apimart', label: 'APIMart', desc: '异步 · 任务轮询' },
-  { key: 'dmfox', label: 'DM-Fox', desc: '同步 · 直接返回' },
+  { key: 'dmfox', label: 'New API', desc: '同步 · OpenAI 兼容' },
 ]
 
 export default function ProviderSwitcher() {

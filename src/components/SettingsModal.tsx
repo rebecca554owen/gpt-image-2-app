@@ -156,7 +156,7 @@ export default function SettingsModal() {
               <div className="block">
                 <span className="block text-xs text-gray-500 mb-1.5">供应商</span>
                 <div className="flex gap-2">
-                  {([['apimart', 'APIMart（异步）'], ['dmfox', 'DM-Fox（同步）']] as const).map(([key, label]) => (
+                  {([['apimart', 'APIMart（异步）'], ['dmfox', 'New API（同步）']] as const).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => {
