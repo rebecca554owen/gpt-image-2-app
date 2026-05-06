@@ -430,9 +430,9 @@ export async function submitGenerationSync(
 
   // Capacitor 环境下没有 Vite proxy，需要直连
   const isCapacitor = !!(window as any).Capacitor?.isNativePlatform?.()
-  // DM-Fox 无 CORS 头，开发环境走 Vite proxy；Capacitor/其他供应商直连
+  // Vite dev proxy 仅开发环境可用；生产构建 / Capacitor 直连 API
   const syncUrl = (endpoint: string) =>
-    isDmfox && !isCapacitor
+    isDmfox && !isCapacitor && import.meta.env.DEV
       ? `/codex/v1/${endpoint}`
       : `${normalizeBaseUrl(settings.baseUrl)}/v1/${endpoint}`
 
