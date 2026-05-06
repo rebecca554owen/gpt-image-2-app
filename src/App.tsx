@@ -64,7 +64,7 @@ export default function App() {
     })
     // APP 回到前台时恢复中断的任务
     const cleanupApp = onAppStateChange(({ isActive }) => {
-      if (isActive) resumeInProgressTasks()
+      if (isActive) resumeInProgressTasks(true)
     })
     return () => { cleanupNet(); cleanupApp() }
   }, [])

@@ -176,7 +176,7 @@ export function clearFailedTasks() {
   }
   const remaining = tasks.filter((t) => !failedIds.has(t.id))
   setTasks(remaining)
-  saveTasks(remaining.slice(0, 200)).catch(() => {})
+  saveTasks(remaining.slice(0, 1000)).catch(() => {})
   // 从所有文件夹中移除已删除任务的引用
   if (folders.some((f) => f.taskIds.some((id) => failedIds.has(id)))) {
     setFolders(folders.map((f) => ({ ...f, taskIds: f.taskIds.filter((id) => !failedIds.has(id)) })))
@@ -184,18 +184,84 @@ export function clearFailedTasks() {
   showToast(`已清理 ${failedIds.size} 条失败记录`, 'success')
 }
 
-/** 获取缓存统计信息 */
+/** 获取所有缓存统计信息 */
 export function getCacheStats() {
-  const entries = Array.from(remoteImageCache.entries())
-  let totalBytes = 0
-  for (const [, dataUrl] of entries) {
-    totalBytes += dataUrl.length * 2 // UTF-16 → 字节估算
+  const cacheEntries = Array.from(remoteImageCache.entries())
+  let cacheBytes = 0
+  for (const [, dataUrl] of cacheEntries) {
+    cacheBytes += dataUrl.length * 2
+  }
+  const taskImages = useStore.getState().tasks
+    .filter((t) => t.status === 'completed')
+    .flatMap((t) => t.outputUrls.filter((u) => !/^https?:\/\//i.test(u)))
+  let taskBytes = 0
+  for (const dataUrl of taskImages) {
+    taskBytes += dataUrl.length * 2
   }
   return {
-    count: entries.length,
-    bytes: totalBytes,
-    urls: entries.map(([url]) => url),
+    count: cacheEntries.length + taskImages.length,
+    bytes: cacheBytes + taskBytes,
+    urls: cacheEntries.map(([url]) => url),
+    /** 缓存条目数（远程 URL → dataUrl） */
+    cacheCount: cacheEntries.length,
+    /** 任务输出 dataUrl 数 */
+    taskCount: taskImages.length,
   }
+}
+
+/** 数据库图片条目（供图片浏览使用） */
+export interface StoredImage {
+  id: string
+  dataUrl: string
+  /** 来源：'cache' = 远程缓存, 'task' = 任务输出 */
+  source: 'cache' | 'task'
+  /** 来源标签 */
+  label: string
+  /** 仅 cache 可删除 */
+  deletable: boolean
+  /** cache 的原始 url 键 */
+  cacheKey?: string
+}
+
+/** 获取所有数据库存储的图片 */
+export function getAllStoredImages(): StoredImage[] {
+  const result: StoredImage[] = []
+  // 远程缓存图片
+  for (const [url, dataUrl] of remoteImageCache) {
+    result.push({
+      id: `cache-${url.slice(-32)}`,
+      dataUrl,
+      source: 'cache',
+      label: '缓存',
+      deletable: true,
+      cacheKey: url,
+    })
+  }
+  // 任务输出 dataUrl
+  const tasks = useStore.getState().tasks
+  for (const t of tasks) {
+    if (t.status !== 'completed') continue
+    for (let i = 0; i < t.outputUrls.length; i++) {
+      const u = t.outputUrls[i]
+      if (/^https?:\/\//i.test(u)) continue // 远程 URL 不直接展示
+      result.push({
+        id: `${t.id}-${i}`,
+        dataUrl: u,
+        source: 'task',
+        label: t.prompt.slice(0, 50) || '任务输出',
+        deletable: false,
+      })
+    }
+  }
+  return result
+}
+
+/** 删除单条远程图片缓存 */
+export function removeCachedImage(url: string) {
+  remoteImageCache.delete(url)
+  _cacheVersion++
+  saveCacheMap(Array.from(remoteImageCache.entries())).catch(() => {})
+  useStore.getState().setTasks([...useStore.getState().tasks])
 }
 
 /** 清理失效的缓存图片（远程 URL 已无法访问的） */
@@ -749,7 +815,7 @@ export async function submitTask() {
       provider: settings.provider,
     }
     setTasks([task, ...tasks])
-    saveTasks([task, ...tasks].slice(0, 200)).catch(() => {})
+    saveTasks([task, ...tasks].slice(0, 1000)).catch(() => {})
 
     // DM-Fox 图生图：多张参考图合成一张拼图，通过 /v1/images/edits 提交
     // 遮罩图需提前检查，有遮罩时合成图必须用 PNG（alpha 通道兼容）
@@ -796,6 +862,7 @@ export async function submitTask() {
         revisedPrompt: result.revisedPrompt,
         usage: result.usage,
         status: 'completed',
+        progress: 100,
         finishedAt,
         elapsed: finishedAt - createdAt,
       })
@@ -832,7 +899,7 @@ export async function submitTask() {
 
   const newTasks = [task, ...tasks]
   setTasks(newTasks)
-  saveTasks(newTasks.slice(0, 200)).catch(() => {})
+  saveTasks(newTasks.slice(0, 1000)).catch(() => {})
 
   executeTask(taskId).catch((err) => {
     showToast(`任务失败：${err.message}`, 'error')
@@ -840,7 +907,7 @@ export async function submitTask() {
 }
 
 async function executeTask(taskId: string) {
-  const { settings, inputImages, tasks, setTasks, showToast } = useStore.getState()
+  const { settings, tasks, setTasks, showToast } = useStore.getState()
   const task = tasks.find((t) => t.id === taskId)
   if (!task) return
 
@@ -849,6 +916,7 @@ async function executeTask(taskId: string) {
 
     // 1. 如果有输入图片，先上传到服务端获取 URL（优先从图片库和已有缓存获取）
     const remoteUrls: string[] = []
+    const inputImages = useStore.getState().inputImages
     const photoLibrary = useStore.getState().photoLibrary
 
     for (const imgId of task.inputImageIds) {
@@ -951,6 +1019,7 @@ async function executeTask(taskId: string) {
           updateTaskInStore(taskId, {
             status: 'completed',
             outputUrls: imageUrls,
+            progress: 100,
             finishedAt: Date.now(),
             elapsed: data.actual_time ? data.actual_time * 1000 : Date.now() - task.createdAt,
           })
@@ -1079,6 +1148,26 @@ export async function retryTask(taskId: string) {
   try {
     // 收集已上传的参考图 URL（优先使用任务记录的 inputRemoteUrls）
     const remoteUrls = [...(task.inputRemoteUrls || [])]
+    // 如果之前图片未上传成功（remoteUrls 为空但 task 有 inputImageIds），尝试重新上传
+    if (remoteUrls.length === 0 && task.inputImageIds.length > 0) {
+      const retryInputImages = useStore.getState().inputImages
+      const retryPhotoLibrary = useStore.getState().photoLibrary
+      for (const imgId of task.inputImageIds) {
+        const img = retryInputImages.find((i) => i.id === imgId)
+        if (img?.remoteUrl) { remoteUrls.push(img.remoteUrl); continue }
+        const libImg = retryPhotoLibrary.find((p) => p.id === imgId || (img?.dataUrl && p.dataUrl === img.dataUrl))
+        if (libImg?.remoteUrl) { remoteUrls.push(libImg.remoteUrl); continue }
+        if (img?.dataUrl) {
+          try {
+            const compressed = await compressImage(img.dataUrl)
+            const resp = await fetch(compressed)
+            const blob = await resp.blob()
+            const url = await uploadImage(settings, blob, `retry-${imgId.slice(0, 8)}.png`)
+            remoteUrls.push(url)
+          } catch { /* 上传失败不阻塞重试 */ }
+        }
+      }
+    }
     // 还需要检查当前 store 中的 maskImage（如有也上传）
     let maskUrl: string | undefined
     const maskImage = useStore.getState().maskImage
@@ -1131,6 +1220,7 @@ export async function retryTask(taskId: string) {
           updateTaskInStore(taskId, {
             status: 'completed',
             outputUrls: imageUrls,
+            progress: 100,
             finishedAt: Date.now(),
             elapsed: data.actual_time ? data.actual_time * 1000 : Date.now() - task.createdAt,
           })
@@ -1170,7 +1260,7 @@ function updateTaskInStore(taskId: string, patch: Partial<TaskRecord>) {
   // 持久化到 IndexedDB（无配额限制）
   const newTask = updated.find((t) => t.id === taskId)
   if (newTask) {
-    saveTasks(updated.slice(0, 200)).catch(() => {})
+    saveTasks(updated.slice(0, 1000)).catch(() => {})
   }
 }
 
@@ -1189,17 +1279,26 @@ export async function restoreTasks(): Promise<TaskRecord[]> {
 }
 
 /** 恢复中断的 in_progress 任务 */
-export function resumeInProgressTasks() {
+export function resumeInProgressTasks(fromBackground = false) {
   const { tasks, showToast } = useStore.getState()
+
+  // 有 remoteTaskId 的任务（不限供应商）：恢复轮询
   const pendingTasks = tasks.filter(
     (t) => (t.status === 'in_progress' || t.status === 'submitted') && t.remoteTaskId,
   )
+
+  // 同步任务（DM-Fox 或未知供应商）：仅在冷启动时标记为失败
+  // 后台恢复时不处理 —— Capacitor 原生 HTTP 层在后台继续运行，Promise 仍会 resolve
   const stuckSyncTasks = tasks.filter(
-    (t) => t.status === 'in_progress' && !t.remoteTaskId,
+    (t) => t.status === 'in_progress' && !t.remoteTaskId && (!t.provider || t.provider !== 'apimart'),
   )
 
-  // 同步任务（DM-Fox）无法恢复轮询，标记为失败并提示重试
-  if (stuckSyncTasks.length > 0) {
+  // APIMart 异步任务：被中断在图片上传或提交阶段，需要重新执行
+  const restartAsyncTasks = tasks.filter(
+    (t) => (t.status === 'submitted' || t.status === 'in_progress') && !t.remoteTaskId && t.provider === 'apimart',
+  )
+
+  if (!fromBackground && stuckSyncTasks.length > 0) {
     for (const t of stuckSyncTasks) {
       updateTaskInStore(t.id, {
         status: 'failed',
@@ -1216,10 +1315,11 @@ export function resumeInProgressTasks() {
     )
   }
 
-  // 异步任务（APIMart）恢复轮询
-  if (pendingTasks.length > 0) {
-    showToast(`正在恢复 ${pendingTasks.length} 个任务...`, 'info')
-    for (const t of pendingTasks) {
+  // 异步任务恢复（含已提交需轮询 + 被中断需重新执行的）
+  const resumeAll = [...pendingTasks, ...restartAsyncTasks]
+  if (resumeAll.length > 0) {
+    showToast(`正在恢复 ${resumeAll.length} 个任务...`, 'info')
+    for (const t of resumeAll) {
       executeTask(t.id).catch(() => {})
     }
   }
@@ -1253,7 +1353,7 @@ export function removeTask(taskId: string) {
   const deleted = tasks.find((t) => t.id === taskId)
   const remaining = tasks.filter((t) => t.id !== taskId)
   setTasks(remaining)
-  saveTasks(remaining.slice(0, 200)).catch(() => {})
+  saveTasks(remaining.slice(0, 1000)).catch(() => {})
   // 保存被删除任务原本所在的文件夹
   const affectedFolders = folders.filter((f) => f.taskIds.includes(taskId))
   // 从所有文件夹中移除该任务引用
@@ -1265,8 +1365,9 @@ export function removeTask(taskId: string) {
     onClick: () => {
       if (!deleted) return
       const { tasks: cur, setTasks: setT, folders: curF, setFolders: setF } = useStore.getState()
-      setT([...cur, deleted])
-      saveTasks([...cur, deleted].slice(0, 200)).catch(() => {})
+      const restored = [...cur, deleted].sort((a, b) => b.createdAt - a.createdAt)
+      setT(restored)
+      saveTasks(restored.slice(0, 1000)).catch(() => {})
       if (affectedFolders.length > 0) {
         setF(curF.map((f) => {
           const orig = affectedFolders.find((af) => af.id === f.id)
@@ -1285,7 +1386,7 @@ export function removeTasks(taskIds: string[]) {
   const deleted = tasks.filter((t) => idSet.has(t.id))
   const remaining = tasks.filter((t) => !idSet.has(t.id))
   setTasks(remaining)
-  saveTasks(remaining.slice(0, 200)).catch(() => {})
+  saveTasks(remaining.slice(0, 1000)).catch(() => {})
   // 保存被删除任务原本所在的文件夹
   const affectedFolders = folders.filter((f) => f.taskIds.some((id) => idSet.has(id))).map((f) => ({
     id: f.id,
@@ -1299,8 +1400,9 @@ export function removeTasks(taskIds: string[]) {
     label: '撤销',
     onClick: () => {
       const { tasks: cur, setTasks: setT, folders: curF, setFolders: setF } = useStore.getState()
-      setT([...cur, ...deleted])
-      saveTasks([...cur, ...deleted].slice(0, 200)).catch(() => {})
+      const restored = [...cur, ...deleted].sort((a, b) => b.createdAt - a.createdAt)
+      setT(restored)
+      saveTasks(restored.slice(0, 1000)).catch(() => {})
       if (affectedFolders.length > 0) {
         setF(curF.map((f) => {
           const orig = affectedFolders.find((af) => af.id === f.id)
@@ -1436,11 +1538,11 @@ export async function fetchRemoteTask(remoteTaskId: string) {
           ? {
               ...t,
               status: mapRemoteStatus(data.status),
-              progress: data.progress ?? 0,
+              progress: data.status === 'completed' ? 100 : (data.progress ?? 0),
               outputUrls: extractImageUrls(data),
               error: data.fail_reason || data.error?.message || null,
               finishedAt: data.status === 'completed' || data.status === 'failed' ? Date.now() : null,
-              elapsed: data.actual_time ? data.actual_time * 1000 : null,
+              elapsed: data.actual_time != null ? data.actual_time * 1000 : null,
             }
           : t,
       )
@@ -1461,10 +1563,10 @@ export async function fetchRemoteTask(remoteTaskId: string) {
       outputUrls: extractImageUrls(data),
       status: mapRemoteStatus(data.status),
       error: data.fail_reason || data.error?.message || null,
-      progress: data.progress ?? 0,
+      progress: data.status === 'completed' ? 100 : (data.progress ?? 0),
       createdAt: Date.now(),
       finishedAt: data.status === 'completed' || data.status === 'failed' ? Date.now() : null,
-      elapsed: data.actual_time ? data.actual_time * 1000 : null,
+      elapsed: data.actual_time != null ? data.actual_time * 1000 : null,
     }
 
     const newTasks = [newTask, ...tasks]
@@ -1500,5 +1602,5 @@ function extractImageUrls(data: NonNullable<import('./types').TaskQueryResponse[
 }
 
 function saveTasksToLocal(tasks: TaskRecord[]) {
-  saveTasks(tasks.slice(0, 200)).catch(() => {})
+  saveTasks(tasks.slice(0, 1000)).catch(() => {})
 }
