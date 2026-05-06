@@ -27,8 +27,6 @@ export interface AppSettings {
   dmfoxApiKey: string
   model: string
   timeout: number
-  /** CORS 代理地址（New API 在 Web 端需要，留空则直连） */
-  corsProxy: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -39,7 +37,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dmfoxApiKey: '',
   model: 'gpt-image-2-official',
   timeout: 300,
-  corsProxy: '',
 }
 
 // ===== 任务参数 =====

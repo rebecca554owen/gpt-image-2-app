@@ -262,9 +262,10 @@ export async function compressImage(
 async function parseSyncResponse(
   response: Response,
   mime: string,
+  url: string,
 ): Promise<import('../types').SyncGenerationResult> {
   if (!response.ok) {
-    let errorMsg = `HTTP ${response.status}`
+    let errorMsg = `[${url}] HTTP ${response.status}`
     let errorBody = ''
     try {
       errorBody = await response.text()
@@ -431,15 +432,10 @@ export async function submitGenerationSync(
   // Capacitor 环境下没有 Vite proxy，需要直连
   const isCapacitor = !!(window as any).Capacitor?.isNativePlatform?.()
   // Vite dev proxy 仅开发环境可用；生产构建 / Capacitor 直连 API
-  // 生产 Web 无 CORS 时通过 corsProxy 中转
-  const useDevProxy = isDmfox && !isCapacitor && import.meta.env.DEV
-  const corsProxy = !isCapacitor && !import.meta.env.DEV && isDmfox ? (settings as any).corsProxy || '' : ''
-  const syncUrl = (endpoint: string) => {
-    const direct = `${normalizeBaseUrl(settings.baseUrl)}/v1/${endpoint}`
-    if (useDevProxy) return `/codex/v1/${endpoint}`
-    if (corsProxy) return `${corsProxy.replace(/\/+$/, '')}/${direct}`
-    return direct
-  }
+  const syncUrl = (endpoint: string) =>
+    isDmfox && !isCapacitor && import.meta.env.DEV
+      ? `/codex/v1/${endpoint}`
+      : `${normalizeBaseUrl(settings.baseUrl)}/v1/${endpoint}`
 
   if (hasInput) {
     // 路径 A — 图生图：POST /v1/images/edits（multipart/form-data）
@@ -459,14 +455,19 @@ export async function submitGenerationSync(
       formData.append('mask', dataUrlToBlob(maskDataUrl), 'mask.png')
     }
 
-    return parseSyncResponse(
-      await fetchWithRetry(apiUrl, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${settings.apiKey}` },
-        body: formData,
-      }, timeoutMs),
-      mime,
-    )
+    try {
+      return parseSyncResponse(
+        await fetchWithRetry(apiUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${settings.apiKey}` },
+          body: formData,
+        }, timeoutMs),
+        mime,
+        apiUrl,
+      )
+    } catch (err) {
+      throw new Error(`[POST ${apiUrl}] ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   // 路径 B — 文生图：POST /v1/images/generations（JSON body）
@@ -480,17 +481,22 @@ export async function submitGenerationSync(
   })
   console.log('[submitGenerationSync:generations]', { apiUrl, body: reqBody, timeoutMs, isCapacitor: isCapacitor })
 
-  return parseSyncResponse(
-    await fetchWithRetry(apiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${settings.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: reqBody,
-    }, timeoutMs),
-    mime,
-  )
+  try {
+    return parseSyncResponse(
+      await fetchWithRetry(apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${settings.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: reqBody,
+      }, timeoutMs),
+      mime,
+      apiUrl,
+    )
+  } catch (err) {
+    throw new Error(`[POST ${apiUrl}] ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 /**
