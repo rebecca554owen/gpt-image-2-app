@@ -268,6 +268,26 @@ export default function SettingsModal() {
                 />
                 <div className="mt-1 text-[10px] text-gray-400">建议 ≥ 180 秒（high + 4K 可能耗时 130s+）</div>
               </label>
+
+              {draft.provider === 'dmfox' && (
+                <label className="block">
+                  <span className="block text-xs text-gray-500 mb-1">
+                    CORS 代理
+                    <span className="text-gray-400 ml-1">（Web 端 New API 需要，留空直连）</span>
+                  </span>
+                  <input
+                    value={draft.corsProxy ?? ''}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, corsProxy: e.target.value }))}
+                    onBlur={(e) => commitSettings({ ...draft, corsProxy: e.target.value })}
+                    type="text"
+                    placeholder="https://your-cors-proxy.com"
+                    className="w-full rounded-xl border border-gray-200/70 bg-white/60 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+                  />
+                  <div className="mt-1 text-[10px] text-gray-400">
+                    用 <code className="bg-gray-100 px-1 py-0.5 rounded">https://<em>proxy</em>/<em>原始URL</em></code> 格式转发请求
+                  </div>
+                </label>
+              )}
             </div>
           </section>
 

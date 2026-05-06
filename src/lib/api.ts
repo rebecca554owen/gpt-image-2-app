@@ -431,10 +431,15 @@ export async function submitGenerationSync(
   // Capacitor 环境下没有 Vite proxy，需要直连
   const isCapacitor = !!(window as any).Capacitor?.isNativePlatform?.()
   // Vite dev proxy 仅开发环境可用；生产构建 / Capacitor 直连 API
-  const syncUrl = (endpoint: string) =>
-    isDmfox && !isCapacitor && import.meta.env.DEV
-      ? `/codex/v1/${endpoint}`
-      : `${normalizeBaseUrl(settings.baseUrl)}/v1/${endpoint}`
+  // 生产 Web 无 CORS 时通过 corsProxy 中转
+  const useDevProxy = isDmfox && !isCapacitor && import.meta.env.DEV
+  const corsProxy = !isCapacitor && !import.meta.env.DEV && isDmfox ? (settings as any).corsProxy || '' : ''
+  const syncUrl = (endpoint: string) => {
+    const direct = `${normalizeBaseUrl(settings.baseUrl)}/v1/${endpoint}`
+    if (useDevProxy) return `/codex/v1/${endpoint}`
+    if (corsProxy) return `${corsProxy.replace(/\/+$/, '')}/${direct}`
+    return direct
+  }
 
   if (hasInput) {
     // 路径 A — 图生图：POST /v1/images/edits（multipart/form-data）

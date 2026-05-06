@@ -10,7 +10,14 @@ import { saveTasks, loadTasks, clearTasks, clearAllIndexedDB, migrateFromLocalSt
 import { saveThumbCache, loadThumbCache } from './lib/imageStore'
 import { compositeImages } from './lib/composite'
 
-/** 判断是否为网络/超时错误（可重试） */
+/** 为同步 API 错误附加 CORS 提示 */
+function formatSyncError(err: unknown, settings: AppSettings): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (/Failed to fetch/i.test(msg) && !import.meta.env.DEV && settings.provider === 'dmfox') {
+    return `${msg}（Web 端 New API 直连需 CORS 代理，请在设置中配置后重试）`
+  }
+  return msg
+}
 function isNetworkError(err: unknown): boolean {
   if (err instanceof TypeError) return true
   if (err instanceof DOMException && err.name === 'AbortError') return true
@@ -664,6 +671,7 @@ export const useStore = create<AppState>()(
         if (!merged.settings.provider) merged.settings.provider = 'apimart'
         if (!merged.settings.apimartApiKey) merged.settings.apimartApiKey = ''
         if (!merged.settings.dmfoxApiKey) merged.settings.dmfoxApiKey = ''
+        if (!merged.settings.corsProxy) merged.settings.corsProxy = ''
         return merged
       },
     },
@@ -870,7 +878,7 @@ export async function submitTask() {
     } catch (err) {
       updateTaskInStore(taskId, {
         status: 'failed',
-        error: err instanceof Error ? err.message : String(err),
+        error: formatSyncError(err, settings),
         finishedAt: Date.now(),
         elapsed: Date.now() - createdAt,
       })
