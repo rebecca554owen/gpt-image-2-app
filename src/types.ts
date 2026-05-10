@@ -32,12 +32,12 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  provider: 'apimart',
-  baseUrl: 'https://api.apimart.ai',
+  provider: 'dmfox',
+  baseUrl: DEFAULT_API_URL,
   apiKey: '',
   apimartApiKey: '',
   dmfoxApiKey: '',
-  model: 'gpt-image-2-official',
+  model: 'gpt-image-2',
   timeout: 300,
 }
 

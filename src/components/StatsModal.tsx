@@ -6,7 +6,6 @@ import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 export default function StatsModal() {
   const showStats = useStore((s) => s.showStats)
   const setShowStats = useStore((s) => s.setShowStats)
-  const [tab, setTab] = useState<'overview' | 'provider'>('overview')
   const [stats, setStats] = useState<TaskStats | null>(null)
 
   useCloseOnEscape(showStats, () => setShowStats(false))
@@ -50,86 +49,46 @@ export default function StatsModal() {
           </button>
         </div>
 
-        {/* 标签页 */}
-        <div className="flex gap-1 mb-5 bg-gray-100 rounded-xl p-1">
-          {[['overview', '概览'], ['provider', '按供应商']].map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => setTab(k as any)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                tab === k ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'
-              }`}
-            >{label}</button>
-          ))}
-        </div>
+        <div className="space-y-4">
+          {/* 概要数字 */}
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="总任务" value={String(stats.total)} />
+            <StatCard label="已完成" value={String(stats.completed)} sub={fmtPct(stats.completed, stats.total)} />
+            <StatCard label="失败" value={String(stats.failed)} sub={fmtPct(stats.failed, stats.total)} />
+            <StatCard label="进行中" value={String(stats.inProgress)} />
+            <StatCard label="总图片数" value={String(stats.totalImages)} />
+            <StatCard label="总耗时" value={fmtMs(stats.totalElapsedMs)} />
+          </div>
 
-        {tab === 'overview' && (
-          <div className="space-y-4">
-            {/* 概要数字 */}
-            <div className="grid grid-cols-3 gap-3">
-              <StatCard label="总任务" value={String(stats.total)} />
-              <StatCard label="已完成" value={String(stats.completed)} sub={fmtPct(stats.completed, stats.total)} />
-              <StatCard label="失败" value={String(stats.failed)} sub={fmtPct(stats.failed, stats.total)} />
-              <StatCard label="进行中" value={String(stats.inProgress)} />
-              <StatCard label="总图片数" value={String(stats.totalImages)} />
-              <StatCard label="总耗时" value={fmtMs(stats.totalElapsedMs)} />
-            </div>
+          {/* 今日 */}
+          <div className="bg-blue-50 rounded-xl p-3 text-sm">
+            <span className="text-blue-500 font-medium">今日</span>
+            <span className="text-blue-600 ml-2">
+              生成 {stats.today.completed} / {stats.today.total} 次
+            </span>
+          </div>
 
-            {/* 今日 */}
-            <div className="bg-blue-50 rounded-xl p-3 text-sm">
-              <span className="text-blue-500 font-medium">今日</span>
-              <span className="text-blue-600 ml-2">
-                生成 {stats.today.completed} / {stats.today.total} 次
-              </span>
-            </div>
-
-            {/* Usage */}
-            {(stats.usage.inputTokens > 0 || stats.usage.outputTokens > 0) && (
-              <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1">
-                <div className="font-medium text-gray-600 mb-1">Token 用量</div>
-                <div className="flex justify-between">
-                  <span>输入</span>
-                  <span className="font-mono">{stats.usage.inputTokens.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>输出</span>
-                  <span className="font-mono">{stats.usage.outputTokens.toLocaleString()}</span>
-                </div>
-                {stats.usage.images > 0 && (
-                  <div className="flex justify-between">
-                    <span>API 图片数</span>
-                    <span className="font-mono">{stats.usage.images}</span>
-                  </div>
-                )}
+          {/* Usage */}
+          {(stats.usage.inputTokens > 0 || stats.usage.outputTokens > 0) && (
+            <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1">
+              <div className="font-medium text-gray-600 mb-1">Token 用量</div>
+              <div className="flex justify-between">
+                <span>输入</span>
+                <span className="font-mono">{stats.usage.inputTokens.toLocaleString()}</span>
               </div>
-            )}
-          </div>
-        )}
-
-        {tab === 'provider' && (
-          <div className="space-y-3">
-            {Object.entries(stats.byProvider).length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-8">暂无数据</p>
-            )}
-            {Object.entries(stats.byProvider).map(([prov, data]) => {
-              const avg = data.completed > 0 ? data.elapsedMs / data.completed : 0
-              return (
-                <div key={prov} className="bg-gray-50 rounded-xl p-3 text-sm space-y-2">
-                  <div className="font-medium text-gray-700 flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${prov === 'apimart' ? 'bg-blue-400' : prov === 'dmfox' ? 'bg-amber-400' : 'bg-gray-300'}`} />
-                    {prov === 'apimart' ? 'APIMart' : prov === 'dmfox' ? 'New API' : '未知'}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                    <div>任务: <span className="font-mono text-gray-700">{data.total}</span></div>
-                    <div>成功: <span className="font-mono text-gray-700">{data.completed}</span></div>
-                    <div>图片: <span className="font-mono text-gray-700">{data.images}</span></div>
-                    <div>平均耗时: <span className="font-mono text-gray-700">{avg > 0 ? fmtMs(avg) : '-'}</span></div>
-                  </div>
+              <div className="flex justify-between">
+                <span>输出</span>
+                <span className="font-mono">{stats.usage.outputTokens.toLocaleString()}</span>
+              </div>
+              {stats.usage.images > 0 && (
+                <div className="flex justify-between">
+                  <span>API 图片数</span>
+                  <span className="font-mono">{stats.usage.images}</span>
                 </div>
-              )
-            })}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

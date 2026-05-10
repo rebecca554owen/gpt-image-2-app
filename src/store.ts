@@ -511,10 +511,15 @@ export const useStore = create<AppState>()(
       settings: { ...DEFAULT_SETTINGS },
       setSettings: (s) =>
         set((st) => {
-          const next = { ...st.settings, ...s }
+          const requested = {
+            ...s,
+            provider: 'dmfox' as const,
+            baseUrl: PROVIDER_CONFIG.dmfox.baseUrl,
+          }
+          const next = { ...st.settings, ...requested }
           // 切换供应商时自动更新 baseUrl 和 model，并独立保存/恢复 API Key
-          if (s.provider && s.provider !== st.settings.provider) {
-            const cfg = PROVIDER_CONFIG[s.provider]
+          if (requested.provider && requested.provider !== st.settings.provider) {
+            const cfg = PROVIDER_CONFIG[requested.provider]
 
             // 把当前 apiKey 存到旧供应商的专用字段
             if (st.settings.provider === 'apimart') {
@@ -523,12 +528,7 @@ export const useStore = create<AppState>()(
               next.dmfoxApiKey = st.settings.apiKey
             }
 
-            // 恢复新供应商上次保存的 Key（如果没有则清空，避免混用）
-            if (s.provider === 'apimart') {
-              next.apiKey = st.settings.apimartApiKey || ''
-            } else if (s.provider === 'dmfox') {
-              next.apiKey = st.settings.dmfoxApiKey || ''
-            }
+            next.apiKey = st.settings.dmfoxApiKey || st.settings.apiKey || ''
 
             next.baseUrl = cfg.baseUrl
             next.model = cfg.model
@@ -661,7 +661,11 @@ export const useStore = create<AppState>()(
       merge: (persisted: any, current) => {
         const merged = { ...current, ...persisted }
         // 兼容旧版没有的字段
-        if (!merged.settings.provider) merged.settings.provider = 'apimart'
+        const cfg = PROVIDER_CONFIG.dmfox
+        merged.settings.provider = 'dmfox'
+        merged.settings.baseUrl = cfg.baseUrl
+        if (!merged.settings.model || merged.settings.model === PROVIDER_CONFIG.apimart.model) merged.settings.model = cfg.model
+        merged.settings.apiKey = merged.settings.dmfoxApiKey || merged.settings.apiKey || ''
         if (!merged.settings.apimartApiKey) merged.settings.apimartApiKey = ''
         if (!merged.settings.dmfoxApiKey) merged.settings.dmfoxApiKey = ''
         return merged

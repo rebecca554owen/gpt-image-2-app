@@ -1,7 +1,6 @@
 import { useEffect, useCallback, useState } from 'react'
 import { initStore } from './store'
 import { useStore } from './store'
-import { normalizeBaseUrl } from './lib/api'
 import { isNative } from './lib/platform'
 import { usePullToRefresh } from './hooks/usePullToRefresh'
 import { setStatusBarStyle, setStatusBarColor, onNetworkChange, onAppStateChange } from './lib/native'
@@ -71,20 +70,16 @@ export default function App() {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
-    const nextSettings: { baseUrl?: string; apiKey?: string } = {}
-
-    const apiUrlParam = searchParams.get('apiUrl')
-    if (apiUrlParam !== null) {
-      nextSettings.baseUrl = normalizeBaseUrl(apiUrlParam.trim())
-    }
+    const nextSettings: { apiKey?: string } = {}
+    const hadApiUrlParam = searchParams.has('apiUrl')
 
     const apiKeyParam = searchParams.get('apiKey')
     if (apiKeyParam !== null) {
       nextSettings.apiKey = apiKeyParam.trim()
     }
 
-    if (Object.keys(nextSettings).length > 0) {
-      setSettings(nextSettings)
+    if (Object.keys(nextSettings).length > 0 || hadApiUrlParam) {
+      if (Object.keys(nextSettings).length > 0) setSettings(nextSettings)
 
       searchParams.delete('apiUrl')
       searchParams.delete('apiKey')

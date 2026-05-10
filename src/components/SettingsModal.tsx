@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { normalizeBaseUrl, queryBalance } from '../lib/api'
+import { normalizeBaseUrl } from '../lib/api'
 import { useStore, clearAllData } from '../store'
-import { DEFAULT_SETTINGS, PROVIDER_CONFIG, type AppSettings } from '../types'
+import { DEFAULT_SETTINGS, type AppSettings } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 import { isNative } from '../lib/platform'
@@ -18,45 +18,12 @@ export default function SettingsModal() {
   const [timeoutInput, setTimeoutInput] = useState(String(settings.timeout))
   const [showApiKey, setShowApiKey] = useState(false)
 
-  // 余额查询
-  const [balance, setBalance] = useState<{ remain: string; used: string; unlimited: boolean } | null>(null)
-  const [balanceLoading, setBalanceLoading] = useState(false)
-  const [balanceError, setBalanceError] = useState<string | null>(null)
-
   useEffect(() => {
     if (showSettings) {
       setDraft(settings)
       setTimeoutInput(String(settings.timeout))
-      // 有 API Key 时自动查询余额（仅 APIMart）
-      if (settings.apiKey && settings.provider === 'apimart') {
-        loadBalance()
-      } else {
-        setBalance(null)
-        setBalanceError(null)
-      }
     }
   }, [showSettings, settings])
-
-  const loadBalance = async () => {
-    setBalanceLoading(true)
-    setBalanceError(null)
-    try {
-      const data = await queryBalance(useStore.getState().settings)
-      if (data.success) {
-        setBalance({
-          remain: data.unlimited_quota ? '无限' : String(data.remain_balance ?? '?'),
-          used: String(data.used_balance ?? '?'),
-          unlimited: !!data.unlimited_quota,
-        })
-      } else {
-        setBalanceError(data.message || '查询失败')
-      }
-    } catch (err) {
-      setBalanceError(err instanceof Error ? err.message : '查询失败')
-    } finally {
-      setBalanceLoading(false)
-    }
-  }
 
   const commitSettings = (nextDraft: AppSettings) => {
     const normalizedDraft = {
@@ -152,40 +119,17 @@ export default function SettingsModal() {
               API 配置
             </h4>
             <div className="space-y-4">
-              {/* 供应商切换 */}
-              <div className="block">
-                <span className="block text-xs text-gray-500 mb-1.5">供应商</span>
-                <div className="flex gap-2">
-                  {([['apimart', 'APIMart（异步）'], ['dmfox', 'New API（同步）']] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => {
-                        const cfg = PROVIDER_CONFIG[key]
-                        commitSettings({ ...draft, provider: key, baseUrl: cfg.baseUrl, model: cfg.model })
-                      }}
-                      className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
-                        draft.provider === key
-                          ? 'bg-blue-500 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <label className="block">
                 <span className="block text-xs text-gray-500 mb-1">API URL</span>
                 <input
                   value={draft.baseUrl}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                  onBlur={(e) => commitSettings({ ...draft, baseUrl: e.target.value })}
                   type="text"
                   placeholder={DEFAULT_SETTINGS.baseUrl}
-                  className="w-full rounded-xl border border-gray-200/70 bg-white/60 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+                  readOnly
+                  className="w-full cursor-default rounded-xl border border-gray-200/70 bg-gray-50/80 px-3 py-2 text-sm text-gray-500 outline-none"
                 />
                 <div className="mt-1 text-[10px] text-gray-400">
-                  支持通过查询参数覆盖：<code className="bg-gray-100 px-1 py-0.5 rounded">?apiUrl=</code>
+                  Docker 部署可通过 <code className="bg-gray-100 px-1 py-0.5 rounded">API_URL</code> 环境变量修改。
                 </div>
               </label>
 
@@ -223,27 +167,6 @@ export default function SettingsModal() {
                 </div>
               </div>
 
-              {/* APIMart 专用 Key（DM-Fox 模式下上传图片需用到） */}
-              <div className="block">
-                <span className="block text-xs text-gray-500 mb-1">
-                  APIMart API Key
-                  {draft.provider === 'dmfox' && <span className="text-gray-400 ml-1">（仅图片库需要）</span>}
-                </span>
-                <div className="relative">
-                  <input
-                    value={draft.apimartApiKey}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, apimartApiKey: e.target.value }))}
-                    onBlur={(e) => commitSettings({ ...draft, apimartApiKey: e.target.value })}
-                    type={showApiKey ? 'text' : 'password'}
-                    placeholder={draft.provider === 'apimart' ? '与上方 API Key 相同可留空' : 'sk-...'}
-                    className="w-full rounded-xl border border-gray-200/70 bg-white/60 px-3 py-2 pr-10 text-sm text-gray-700 outline-none transition focus:border-blue-300"
-                  />
-                </div>
-                <div className="mt-1 text-[10px] text-gray-400">
-                  用于图片库上传，与当前供应商的 Key 不同时可单独配置
-                </div>
-              </div>
-
               <label className="block">
                 <span className="block text-xs text-gray-500 mb-1">模型</span>
                 <input
@@ -271,63 +194,6 @@ export default function SettingsModal() {
               </label>
             </div>
           </section>
-
-          {/* 余额信息（仅 APIMart） */}
-          {settings.apiKey && settings.provider === 'apimart' && (
-            <section>
-              <h4 className="mb-3 text-sm font-medium text-gray-800 flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                账户余额
-              </h4>
-              <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
-                {balanceLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    查询中...
-                  </div>
-                ) : balanceError ? (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-red-500">{balanceError}</span>
-                    <button
-                      onClick={loadBalance}
-                      className="text-xs text-blue-500 hover:text-blue-600 transition-colors"
-                    >
-                      重试
-                    </button>
-                  </div>
-                ) : balance ? (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">剩余</span>
-                      <span className={`font-semibold font-mono ${balance.unlimited ? 'text-green-500' : 'text-gray-800'}`}>
-                        {balance.unlimited ? '∞ 无限额度' : balance.remain}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">已使用</span>
-                      <span className="font-mono text-gray-600">{balance.used}</span>
-                    </div>
-                    <button
-                      onClick={loadBalance}
-                      className="mt-1 text-[11px] text-gray-400 hover:text-blue-500 transition-colors flex items-center gap-1"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      刷新
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-400">无法获取余额信息</div>
-                )}
-              </div>
-            </section>
-          )}
 
           {/* 数据管理 */}
           <section>
