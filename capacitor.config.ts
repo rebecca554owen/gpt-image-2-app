@@ -17,7 +17,7 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     allowNavigation: [
-      'dm-fox.rjj.cc',
+      'gpt-agent.cc',
       'api.apimart.ai',
     ],
   },

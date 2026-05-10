@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { normalizeBaseUrl, queryBalance } from '../lib/api'
 import { useStore, clearAllData } from '../store'
-import { DEFAULT_SETTINGS, type AppSettings } from '../types'
+import { DEFAULT_SETTINGS, PROVIDER_CONFIG, type AppSettings } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 import { isNative } from '../lib/platform'
@@ -160,7 +160,8 @@ export default function SettingsModal() {
                     <button
                       key={key}
                       onClick={() => {
-                        commitSettings({ ...draft, provider: key, baseUrl: key === 'dmfox' ? 'https://dm-fox.rjj.cc/codex' : 'https://api.apimart.ai', model: key === 'dmfox' ? 'gpt-image-2' : 'gpt-image-2-official' })
+                        const cfg = PROVIDER_CONFIG[key]
+                        commitSettings({ ...draft, provider: key, baseUrl: cfg.baseUrl, model: cfg.model })
                       }}
                       className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
                         draft.provider === key

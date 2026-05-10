@@ -425,7 +425,7 @@ export async function submitGenerationSync(
   const resolvedSize = ratioToPixels(params.size, params.resolution) || params.size
 
   const hasInput = inputImageDataUrls && inputImageDataUrls.length > 0
-  const isDmfox = settings.baseUrl.includes('dm-fox.rjj.cc')
+  const isDmfox = settings.provider === 'dmfox'
   // DM-Fox 同步请求超时设为 600s（比用户设置的 timeout 更宽松，避免代理层 502）
   const timeoutMs = isDmfox ? 600_000 : (settings.timeout || 300) * 1000
 

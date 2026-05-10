@@ -1,6 +1,8 @@
 // ===== 供应商 =====
 export type Provider = 'apimart' | 'dmfox'
 
+export const DEFAULT_API_URL = import.meta.env.VITE_API_URL?.trim() || 'https://gpt-agent.cc'
+
 export const PROVIDER_CONFIG: Record<Provider, { label: string; baseUrl: string; model: string; isAsync: boolean }> = {
   apimart: {
     label: 'APIMart',
@@ -10,7 +12,7 @@ export const PROVIDER_CONFIG: Record<Provider, { label: string; baseUrl: string;
   },
   dmfox: {
     label: 'DM-Fox',
-    baseUrl: 'https://dm-fox.rjj.cc/codex',
+    baseUrl: DEFAULT_API_URL,
     model: 'gpt-image-2',
     isAsync: false,
   },
