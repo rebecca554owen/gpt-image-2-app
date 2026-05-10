@@ -13,14 +13,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -30,12 +30,20 @@ jobs:
 
       - name: Setup keystore
         run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            KEYSTORE_CONTENT=$(printf '%s' "$KEYSTORE_BASE64" | sed '/^[[:space:]]*```/d' | tr -d '[:space:]')
+            KEYSTORE_CONTENT="MII${KEYSTORE_CONTENT#*MII}"
+            KEYSTORE_CONTENT=$(printf '%s' "$KEYSTORE_CONTENT" | sed 's/[^A-Za-z0-9+\/=].*$//')
+            printf '%s' "$KEYSTORE_CONTENT" | base64 --decode > android/app/gptimage.keystore
+          fi
+
           cat > android/keystore.properties << PROPS
           storePassword=${KEYSTORE_PASSWORD:-gptimage123}
           keyAlias=${KEYSTORE_ALIAS:-gptimage}
           keyPassword=${KEYSTORE_KEY_PASSWORD:-gptimage123}
           PROPS
         env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
           KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
@@ -63,7 +71,7 @@ jobs:
         run: cp android/app/build/outputs/apk/debug/app-debug.apk gpt-image-2-app-v${{ steps.version.outputs.VERSION }}.apk
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
           name: v${{ steps.version.outputs.VERSION }}
@@ -78,7 +86,7 @@ jobs:
           prerelease: false
 
       - name: Upload Artifact (backup)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gpt-image-2-app-v${{ steps.version.outputs.VERSION }}
           path: gpt-image-2-app-v${{ steps.version.outputs.VERSION }}.apk
